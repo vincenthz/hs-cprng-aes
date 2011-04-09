@@ -17,7 +17,7 @@ module Crypto.Random.AESCtr
 	( AESRNG
 	, make
 	, makeSystem
-	, getRandomBytes
+	, genRandomBytes
 	) where
 
 import Control.Applicative ((<$>))
@@ -90,8 +90,8 @@ makeSystem = ofRight . make <$> getEntropy 64
 -- | get a Random number of bytes from the RNG.
 -- for efficienty and not wasted any randomness, it's better to generate
 -- bytes on multiple of 16, however it will works for any size.
-getRandomBytes :: AESRNG -> Int -> (ByteString, AESRNG)
-getRandomBytes rng n =
+genRandomBytes :: AESRNG -> Int -> (ByteString, AESRNG)
+genRandomBytes rng n =
 	let list = helper rng n in
 	(B.concat $ map fst list, snd $ last list)
 	where
@@ -105,7 +105,7 @@ getRandomBytes rng n =
 instance CryptoRandomGen AESRNG where
 	newGen           = make
 	genSeedLength    = 64
-	genBytes len rng = Right $ getRandomBytes rng len
+	genBytes len rng = Right $ genRandomBytes rng len
 	reseed b rng@(RNG _ cnt1 _)
 		| B.length b < 64 = Left NotEnoughEntropy
 		| otherwise       = Right $ RNG (r16 `bxor` iv2) (get128 (put128 cnt1 `bxor` cnt2)) key2
