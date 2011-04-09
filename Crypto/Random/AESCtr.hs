@@ -5,12 +5,12 @@
 -- Stability   : stable
 -- Portability : unknown
 --
--- this CPRNG is an AES cbc based counter system.
+-- this CPRNG is an AES based counter system.
 --
 -- the internal size of fields are: 16 bytes IV, 16 bytes counter, 32 bytes key
 --
 -- each block are generated the following way:
---   (IV `xor` counter) `aes` key -> 16 bytes output
+--   aes (IV `xor` counter) -> 16 bytes output
 --
 
 module Crypto.Random.AESCtr
@@ -57,9 +57,11 @@ makeParams b = (key, cnt, iv)
 		(cnt, left2) = B.splitAt 16 left1
 		(iv, left1)  = B.splitAt 16 b
 
--- | make an AESRNG from a bytestring. the bytestring need to be at least 64 bytes.
+-- | make an AES RNG from a bytestring seed. the bytestring need to be at least 64 bytes.
 -- if the bytestring is longer, the extra bytes will be ignored and will not take part in
 -- the initialization.
+--
+-- use `makeSystem` to not have to deal with the generator seed.
 make :: B.ByteString -> Either GenError AESRNG
 make b
 	| B.length b < 64 = Left NotEnoughEntropy
@@ -80,7 +82,7 @@ nextChunk (RNG iv counter key) = (chunk, newrng)
 		chunk  = AES.encrypt key bytes
 		bytes  = iv `bxor` (put128 counter)
 
--- | Initialize a new AESRng using the system entropy.
+-- | Initialize a new AES RNG using the system entropy.
 makeSystem :: IO AESRNG
 makeSystem = ofRight . make <$> getEntropy 64
 	where
@@ -88,8 +90,8 @@ makeSystem = ofRight . make <$> getEntropy 64
 		ofRight (Right x) = x
 
 -- | get a Random number of bytes from the RNG.
--- for efficienty and not wasted any randomness, it's better to generate
--- bytes on multiple of 16, however it will works for any size.
+-- it generate randomness by block of 16 bytes, but will truncate
+-- to the number of bytes required, and lose the truncated bytes.
 genRandomBytes :: AESRNG -> Int -> (ByteString, AESRNG)
 genRandomBytes rng n =
 	let list = helper rng n in
