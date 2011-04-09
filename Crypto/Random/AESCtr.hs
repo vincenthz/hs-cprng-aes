@@ -77,7 +77,7 @@ nextChunk :: AESRNG -> (ByteString, AESRNG)
 nextChunk (RNG iv counter key) = (chunk, newrng)
 	where
 		newrng = RNG chunk (add1 counter) key
-		chunk  = AES.encryptCBC key iv bytes
+		chunk  = AES.encrypt key bytes
 		bytes  = iv `bxor` (put128 counter)
 
 -- | Initialize a new AESRng using the system entropy.
