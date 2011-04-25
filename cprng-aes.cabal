@@ -1,5 +1,5 @@
 Name:                cprng-aes
-Version:             0.2.0
+Version:             0.2.1
 Description:         
     Simple crypto pseudo-random-number-generator with really good randomness property.
     .
@@ -33,6 +33,7 @@ data-files:          README.md
 Library
   Build-Depends:     base >= 3 && < 5
                    , bytestring
+                   , random
                    , crypto-api >= 0.5
                    , cryptocipher >= 0.2.5 && < 0.3.0
                    , cereal >= 0.3.0 && < 0.4.0

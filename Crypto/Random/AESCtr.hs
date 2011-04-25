@@ -23,6 +23,7 @@ module Crypto.Random.AESCtr
 import Control.Applicative ((<$>))
 
 import Crypto.Random
+import System.Random (RandomGen(..))
 import System.Crypto.Random (getEntropy)
 import qualified Crypto.Cipher.AES as AES
 
@@ -30,7 +31,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 
 import Data.Word
-import Data.Bits (xor)
+import Data.Bits (xor, (.&.))
 import Data.Serialize
 
 data Word128 = Word128 !Word64 !Word64
@@ -114,3 +115,16 @@ instance CryptoRandomGen AESRNG where
 			where
 				(r16, _)          = nextChunk rng
 				(key2, cnt2, iv2) = makeParams b
+
+instance RandomGen AESRNG where
+	next rng =
+		let (bs, rng') = nextChunk rng in
+		let (Word128 a _) = get128 bs in
+		let n = fromIntegral (a .&. 0x7fffffff) in
+		(n, rng')
+	split rng =
+		let (bs, rng') = genRandomBytes rng 64 in
+		case make bs of
+			Left _      -> error "assert"
+			Right rng'' -> (rng', rng'')
+	genRange _ = (0, 0x7fffffff)
