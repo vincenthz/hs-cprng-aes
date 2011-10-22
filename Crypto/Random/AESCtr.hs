@@ -24,7 +24,7 @@ import Control.Applicative ((<$>))
 
 import Crypto.Random
 import System.Random (RandomGen(..))
-import System.Crypto.Random (getEntropy)
+import System.Entropy (getEntropy)
 import qualified Crypto.Cipher.AES as AES
 
 import Data.ByteString (ByteString)
