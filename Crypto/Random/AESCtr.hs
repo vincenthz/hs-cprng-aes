@@ -38,9 +38,9 @@ data Word128 = Word128 {-# UNPACK #-} !Word64 {-# UNPACK #-} !Word64
 
 {-| An opaque object containing an AES CPRNG -}
 data AESRNG = RNG
-	{-# UNPACK #-} !Word128 -- ^ IV
-	{-# UNPACK #-} !Word128 -- ^ Counter
-	{-# UNPACK #-} !AES.Key -- ^ Key
+	{-# UNPACK #-} !Word128
+	{-# UNPACK #-} !Word128
+	{-# UNPACK #-} !AES.Key
 
 instance Show AESRNG where
 	show _ = "aesrng[..]"
