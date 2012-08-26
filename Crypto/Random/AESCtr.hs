@@ -12,7 +12,7 @@
 -- each block are generated the following way:
 --   aes (IV `xor` counter) -> 16 bytes output
 --
-
+{-# LANGUAGE CPP, PackageImports #-}
 module Crypto.Random.AESCtr
 	( AESRNG
 	, make
@@ -25,7 +25,11 @@ import Control.Applicative ((<$>))
 import Crypto.Random
 import System.Random (RandomGen(..))
 import System.Entropy (getEntropy)
-import qualified Crypto.Cipher.AES as AES
+#ifdef CIPHER_AES
+import qualified "cipher-aes" Crypto.Cipher.AES as AES
+#else
+import qualified "cryptocipher" Crypto.Cipher.AES as AES
+#endif
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -60,7 +64,11 @@ add1 (Word128 a b) = if b == 0xffffffffffffffff then Word128 (a+1) 0 else Word12
 makeParams :: ByteString -> (AES.Key, ByteString, ByteString)
 makeParams b = (key, cnt, iv)
 	where
+#ifdef CIPHER_AES
+		key          = AES.initKey $ B.take 32 left2
+#else
 		(Right key)  = AES.initKey256 $ B.take 32 left2
+#endif
 		(cnt, left2) = B.splitAt 16 left1
 		(iv, left1)  = B.splitAt 16 b
 
@@ -83,7 +91,11 @@ genNextChunk :: AESRNG -> (ByteString, AESRNG)
 genNextChunk (RNG iv counter key) = (chunk, newrng)
 	where
 		newrng = RNG (get128 chunk) (add1 counter) key
+#ifdef CIPHER_AES
+		chunk  = AES.encryptECB key bytes
+#else
 		chunk  = AES.encrypt key bytes
+#endif
 		bytes  = put128 (iv `xor128` counter)
 
 -- | Initialize a new AES RNG using the system entropy.

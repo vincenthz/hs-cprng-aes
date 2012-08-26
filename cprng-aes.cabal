@@ -1,5 +1,5 @@
 Name:                cprng-aes
-Version:             0.2.3
+Version:             0.2.4
 Description:         
     Simple crypto pseudo-random-number-generator with really good randomness property.
     .
@@ -30,16 +30,24 @@ Cabal-Version:       >=1.6
 Homepage:            http://github.com/vincenthz/hs-cprng-aes
 data-files:          README.md
 
+Flag fastaes
+  Description:       Use fast AES if available
+  Default:           True
+
 Library
   Build-Depends:     base >= 3 && < 5
                    , bytestring
                    , random
                    , crypto-api >= 0.8
                    , entropy >= 0.2
-                   , cryptocipher >= 0.2.5 && < 0.4.0
+                   , cryptocipher
                    , cereal >= 0.3.0 && < 0.4.0
   Exposed-modules:   Crypto.Random.AESCtr
   ghc-options:       -Wall
+
+  if os(linux) && flag(fastaes) && (arch(i386) || arch(x86_64))
+    cpp-options:     -DCIPHER_AES
+    Build-Depends:   cipher-aes >= 0.1 && < 0.2
 
 source-repository head
   type: git
