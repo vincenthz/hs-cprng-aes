@@ -26,7 +26,7 @@ Synopsis:            Crypto Pseudo Random Number Generator using AES in counter 
 Build-Type:          Simple
 Category:            Cryptography
 stability:           experimental
-Cabal-Version:       >=1.6
+Cabal-Version:       >=1.8
 Homepage:            http://github.com/vincenthz/hs-cprng-aes
 data-files:          README.md
 
@@ -48,6 +48,16 @@ Library
   if os(linux) && flag(fastaes) && (arch(i386) || arch(x86_64))
     cpp-options:     -DCIPHER_AES
     Build-Depends:   cipher-aes >= 0.1 && < 0.2
+
+Benchmark bench-cprng-aes
+  hs-source-dirs:    Benchmarks
+  Main-Is:           Benchmarks.hs
+  type:              exitcode-stdio-1.0
+  Build-depends:     base >= 4 && < 5
+                   , bytestring
+                   , cprng-aes
+                   , criterion
+                   , mtl
 
 source-repository head
   type: git
