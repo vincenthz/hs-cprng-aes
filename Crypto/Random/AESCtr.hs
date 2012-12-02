@@ -118,25 +118,27 @@ makeSystem = ofRight . make <$> getEntropy 64
         ofRight (Right x) = x
 
 -- | get a Random number of bytes from the RNG.
--- it generate randomness by block of 16 bytes, but will truncate
--- to the number of bytes required, and lose the truncated bytes.
+-- it generate randomness by block of chunkSize bytes and will returns
+-- a block bigger or equal to the size requested.
 genRandomBytesState :: RNG -> Int -> (ByteString, RNG)
 genRandomBytesState rng n
-    | n == chunkSize       = genNextChunk rng
-    | otherwise            = (B.concat $ map fst list, snd $ last list)
+    | n <= chunkSize = genNextChunk rng
+    | otherwise      = let (bs, rng') = acc 0 [] rng
+                        in (B.concat bs, rng')
     where
-        list = helper rng n
-        helper _ 0 = []
-        helper g i =
-            let (b, g') = genNextChunk g in
-            if chunkSize >= i
-                then [ (B.take i b, g') ]
-                else (b, g') : helper g' (i-chunkSize)
+        acc l bs g
+            | l * chunkSize >= n = (bs, g)
+            | otherwise          = let (b, g') = genNextChunk g
+                                    in acc (l+1) (b:bs) g'
 
 genRandomBytes :: AESRNG -> Int -> (ByteString, AESRNG)
-genRandomBytes rng n =
-    let (b, rng') = genRandomBytesState (aesrngState rng) n
-     in (b, rng { aesrngState = rng' })
+genRandomBytes rng n
+    | B.length (aesrngCache rng) >= n = let (b1,b2) = B.splitAt n (aesrngCache rng)
+                                         in (b1, rng { aesrngCache = b2 })
+    | otherwise                       =
+            let (b, rng') = genRandomBytesState (aesrngState rng) n
+                (b1, b2)  = B.splitAt n b
+             in (b1, rng { aesrngState = rng', aesrngCache = b2 })
 
 reseedState b rng@(RNG _ cnt1 _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) key2
     where (r16, _)          = genNextChunk rng
