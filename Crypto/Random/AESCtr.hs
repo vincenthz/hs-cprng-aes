@@ -148,6 +148,7 @@ genNextChunk (RNG iv counter sz key) = (chunk, newrng)
         bytes  = put128 (iv `xor128` counter)
 #endif
 
+getRNGReseedLimit :: RNG -> Int
 getRNGReseedLimit (RNG _ _ sz _)
     | sz >= limit = 0
     | otherwise   = fromIntegral (limit - sz)
@@ -180,6 +181,7 @@ genRanBytes rng n
                 (b1, b2)  = B.splitAt n b
              in (b1, rng { aesrngState = rng', aesrngCache = b2 })
 
+reseedState :: ByteString -> RNG -> RNG
 reseedState b rng@(RNG _ cnt1 _ _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) 0 key2
     where (r16, _)          = genNextChunk rng
           (key2, cnt2, iv2) = makeParams b
