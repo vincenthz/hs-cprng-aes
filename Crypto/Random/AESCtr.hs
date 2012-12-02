@@ -41,10 +41,12 @@ import Data.Serialize
 data Word128 = Word128 {-# UNPACK #-} !Word64 {-# UNPACK #-} !Word64
 
 {-| An opaque object containing an AES CPRNG -}
-data AESRNG = RNG
+data RNG = RNG
     {-# UNPACK #-} !Word128
     {-# UNPACK #-} !Word128
     {-# UNPACK #-} !AES.Key
+
+data AESRNG = AESRNG { aesrngState :: RNG }
 
 instance Show AESRNG where
     show _ = "aesrng[..]"
@@ -80,23 +82,32 @@ makeParams b = (key, cnt, iv)
 make :: B.ByteString -> Either GenError AESRNG
 make b
     | B.length b < 64 = Left NotEnoughEntropy
-    | otherwise       = Right $ RNG (get128 iv) (get128 cnt) key
+    | otherwise       = Right $ AESRNG { aesrngState = rng }
         where
+            rng            = RNG (get128 iv) (get128 cnt) key
             (key, cnt, iv) = makeParams b
 
+#ifdef CIPHER_AES
 chunkSize :: Int
 chunkSize = 16
 
-genNextChunk :: AESRNG -> (ByteString, AESRNG)
+genNextChunk :: RNG -> (ByteString, RNG)
 genNextChunk (RNG iv counter key) = (chunk, newrng)
     where
         newrng = RNG (get128 chunk) (add1 counter) key
-#ifdef CIPHER_AES
         chunk  = AES.encryptECB key bytes
-#else
-        chunk  = AES.encrypt key bytes
-#endif
         bytes  = put128 (iv `xor128` counter)
+#else
+chunkSize :: Int
+chunkSize = 16
+
+genNextChunk :: RNG -> (ByteString, RNG)
+genNextChunk (RNG iv counter key) = (chunk, newrng)
+    where
+        newrng = RNG (get128 chunk) (add1 counter) key
+        chunk  = AES.encrypt key bytes
+        bytes  = put128 (iv `xor128` counter)
+#endif
 
 -- | Initialize a new AES RNG using the system entropy.
 makeSystem :: IO AESRNG
@@ -108,9 +119,9 @@ makeSystem = ofRight . make <$> getEntropy 64
 -- | get a Random number of bytes from the RNG.
 -- it generate randomness by block of 16 bytes, but will truncate
 -- to the number of bytes required, and lose the truncated bytes.
-genRandomBytes :: AESRNG -> Int -> (ByteString, AESRNG)
-genRandomBytes rng 16 = genNextChunk rng
-genRandomBytes rng n  = (B.concat $ map fst list, snd $ last list)
+genRandomBytesState :: RNG -> Int -> (ByteString, RNG)
+genRandomBytesState rng 16 = genNextChunk rng
+genRandomBytesState rng n  = (B.concat $ map fst list, snd $ last list)
     where
         list = helper rng n
         helper _ 0 = []
@@ -120,23 +131,29 @@ genRandomBytes rng n  = (B.concat $ map fst list, snd $ last list)
                 then [ (B.take i b, g') ]
                 else (b, g') : helper g' (i-chunkSize)
 
+genRandomBytes :: AESRNG -> Int -> (ByteString, AESRNG)
+genRandomBytes rng n =
+    let (b, rng') = genRandomBytesState (aesrngState rng) n
+     in (b, rng { aesrngState = rng' })
+
+reseedState b rng@(RNG _ cnt1 _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) key2
+    where (r16, _)          = genNextChunk rng
+          (key2, cnt2, iv2) = makeParams b
+
 instance CryptoRandomGen AESRNG where
     newGen           = make
     genSeedLength    = 64
     genBytes len rng = Right $ genRandomBytes rng len
-    reseed b rng@(RNG _ cnt1 _)
+    reseed b rng
         | B.length b < 64 = Left NotEnoughEntropy
-        | otherwise       = Right $ RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) key2
-            where
-                (r16, _)          = genNextChunk rng
-                (key2, cnt2, iv2) = makeParams b
+        | otherwise       = Right $ rng { aesrngState = reseedState b (aesrngState rng) }
 
 instance RandomGen AESRNG where
     next rng =
-        let (bs, rng') = genNextChunk rng in
+        let (bs, rng') = genNextChunk (aesrngState rng) in
         let (Word128 a _) = get128 bs in
         let n = fromIntegral (a .&. 0x7fffffff) in
-        (n, rng')
+        (n, rng { aesrngState = rng' })
     split rng =
         let (bs, rng') = genRandomBytes rng 64 in
         case make bs of
