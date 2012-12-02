@@ -14,11 +14,11 @@
 --
 {-# LANGUAGE CPP, PackageImports #-}
 module Crypto.Random.AESCtr
-	( AESRNG
-	, make
-	, makeSystem
-	, genRandomBytes
-	) where
+    ( AESRNG
+    , make
+    , makeSystem
+    , genRandomBytes
+    ) where
 
 import Control.Applicative ((<$>))
 
@@ -42,12 +42,12 @@ data Word128 = Word128 {-# UNPACK #-} !Word64 {-# UNPACK #-} !Word64
 
 {-| An opaque object containing an AES CPRNG -}
 data AESRNG = RNG
-	{-# UNPACK #-} !Word128
-	{-# UNPACK #-} !Word128
-	{-# UNPACK #-} !AES.Key
+    {-# UNPACK #-} !Word128
+    {-# UNPACK #-} !Word128
+    {-# UNPACK #-} !AES.Key
 
 instance Show AESRNG where
-	show _ = "aesrng[..]"
+    show _ = "aesrng[..]"
 
 put128 :: Word128 -> ByteString
 put128 (Word128 a b) = runPut (putWord64host a >> putWord64host b)
@@ -63,14 +63,14 @@ add1 (Word128 a b) = if b == 0xffffffffffffffff then Word128 (a+1) 0 else Word12
 
 makeParams :: ByteString -> (AES.Key, ByteString, ByteString)
 makeParams b = (key, cnt, iv)
-	where
+    where
 #ifdef CIPHER_AES
-		key          = AES.initKey $ B.take 32 left2
+        key          = AES.initKey $ B.take 32 left2
 #else
-		(Right key)  = AES.initKey256 $ B.take 32 left2
+        (Right key)  = AES.initKey256 $ B.take 32 left2
 #endif
-		(cnt, left2) = B.splitAt 16 left1
-		(iv, left1)  = B.splitAt 16 b
+        (cnt, left2) = B.splitAt 16 left1
+        (iv, left1)  = B.splitAt 16 b
 
 -- | make an AES RNG from a bytestring seed. the bytestring need to be at least 64 bytes.
 -- if the bytestring is longer, the extra bytes will be ignored and will not take part in
@@ -79,31 +79,31 @@ makeParams b = (key, cnt, iv)
 -- use `makeSystem` to not have to deal with the generator seed.
 make :: B.ByteString -> Either GenError AESRNG
 make b
-	| B.length b < 64 = Left NotEnoughEntropy
-	| otherwise       = Right $ RNG (get128 iv) (get128 cnt) key
-		where
-			(key, cnt, iv) = makeParams b
+    | B.length b < 64 = Left NotEnoughEntropy
+    | otherwise       = Right $ RNG (get128 iv) (get128 cnt) key
+        where
+            (key, cnt, iv) = makeParams b
 
 chunkSize :: Int
 chunkSize = 16
 
 genNextChunk :: AESRNG -> (ByteString, AESRNG)
 genNextChunk (RNG iv counter key) = (chunk, newrng)
-	where
-		newrng = RNG (get128 chunk) (add1 counter) key
+    where
+        newrng = RNG (get128 chunk) (add1 counter) key
 #ifdef CIPHER_AES
-		chunk  = AES.encryptECB key bytes
+        chunk  = AES.encryptECB key bytes
 #else
-		chunk  = AES.encrypt key bytes
+        chunk  = AES.encrypt key bytes
 #endif
-		bytes  = put128 (iv `xor128` counter)
+        bytes  = put128 (iv `xor128` counter)
 
 -- | Initialize a new AES RNG using the system entropy.
 makeSystem :: IO AESRNG
 makeSystem = ofRight . make <$> getEntropy 64
-	where
-		ofRight (Left _)  = error "ofRight on a Left value"
-		ofRight (Right x) = x
+    where
+        ofRight (Left _)  = error "ofRight on a Left value"
+        ofRight (Right x) = x
 
 -- | get a Random number of bytes from the RNG.
 -- it generate randomness by block of 16 bytes, but will truncate
@@ -111,35 +111,35 @@ makeSystem = ofRight . make <$> getEntropy 64
 genRandomBytes :: AESRNG -> Int -> (ByteString, AESRNG)
 genRandomBytes rng 16 = genNextChunk rng
 genRandomBytes rng n  = (B.concat $ map fst list, snd $ last list)
-	where
-		list = helper rng n
-		helper _ 0 = []
-		helper g i =
-			let (b, g') = genNextChunk g in
-			if chunkSize >= i
-				then [ (B.take i b, g') ]
-				else (b, g') : helper g' (i-chunkSize)
+    where
+        list = helper rng n
+        helper _ 0 = []
+        helper g i =
+            let (b, g') = genNextChunk g in
+            if chunkSize >= i
+                then [ (B.take i b, g') ]
+                else (b, g') : helper g' (i-chunkSize)
 
 instance CryptoRandomGen AESRNG where
-	newGen           = make
-	genSeedLength    = 64
-	genBytes len rng = Right $ genRandomBytes rng len
-	reseed b rng@(RNG _ cnt1 _)
-		| B.length b < 64 = Left NotEnoughEntropy
-		| otherwise       = Right $ RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) key2
-			where
-				(r16, _)          = genNextChunk rng
-				(key2, cnt2, iv2) = makeParams b
+    newGen           = make
+    genSeedLength    = 64
+    genBytes len rng = Right $ genRandomBytes rng len
+    reseed b rng@(RNG _ cnt1 _)
+        | B.length b < 64 = Left NotEnoughEntropy
+        | otherwise       = Right $ RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) key2
+            where
+                (r16, _)          = genNextChunk rng
+                (key2, cnt2, iv2) = makeParams b
 
 instance RandomGen AESRNG where
-	next rng =
-		let (bs, rng') = genNextChunk rng in
-		let (Word128 a _) = get128 bs in
-		let n = fromIntegral (a .&. 0x7fffffff) in
-		(n, rng')
-	split rng =
-		let (bs, rng') = genRandomBytes rng 64 in
-		case make bs of
-			Left _      -> error "assert"
-			Right rng'' -> (rng', rng'')
-	genRange _ = (0, 0x7fffffff)
+    next rng =
+        let (bs, rng') = genNextChunk rng in
+        let (Word128 a _) = get128 bs in
+        let n = fromIntegral (a .&. 0x7fffffff) in
+        (n, rng')
+    split rng =
+        let (bs, rng') = genRandomBytes rng 64 in
+        case make bs of
+            Left _      -> error "assert"
+            Right rng'' -> (rng', rng'')
+    genRange _ = (0, 0x7fffffff)
