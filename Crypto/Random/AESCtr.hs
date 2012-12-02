@@ -185,6 +185,7 @@ reseedState b rng@(RNG _ cnt1 _ _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 
           (key2, cnt2, iv2) = makeParams b
 
 #ifdef USE_CRYPTOAPI
+-- going away in 0.4.0. use the CPRG instance.
 instance CAPI.CryptoRandomGen AESRNG where
     newGen b         = maybe (Left CAPI.NotEnoughEntropy) Right $ make b
     genSeedLength    = 64
