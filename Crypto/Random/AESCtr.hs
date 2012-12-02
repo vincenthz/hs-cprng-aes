@@ -121,8 +121,9 @@ makeSystem = ofRight . make <$> getEntropy 64
 -- it generate randomness by block of 16 bytes, but will truncate
 -- to the number of bytes required, and lose the truncated bytes.
 genRandomBytesState :: RNG -> Int -> (ByteString, RNG)
-genRandomBytesState rng 16 = genNextChunk rng
-genRandomBytesState rng n  = (B.concat $ map fst list, snd $ last list)
+genRandomBytesState rng n
+    | n == chunkSize       = genNextChunk rng
+    | otherwise            = (B.concat $ map fst list, snd $ last list)
     where
         list = helper rng n
         helper _ 0 = []
