@@ -61,8 +61,13 @@ get128 = either (\_ -> Word128 0 0) id . runGet (getWord64host >>= \a -> (getWor
 xor128 :: Word128 -> Word128 -> Word128
 xor128 (Word128 a1 b1) (Word128 a2 b2) = Word128 (a1 `xor` a2) (b1 `xor` b2)
 
+#ifdef CIPHER_AES
+add64 :: Word128 -> Word128
+add64 (Word128 a b) = if b >= (0xffffffffffffffff-63) then Word128 (a+1) (b+64) else Word128 a (b+64)
+#else
 add1 :: Word128 -> Word128
 add1 (Word128 a b) = if b == 0xffffffffffffffff then Word128 (a+1) 0 else Word128 a (b+1)
+#endif
 
 makeParams :: ByteString -> (AES.Key, ByteString, ByteString)
 makeParams b = (key, cnt, iv)
@@ -90,13 +95,13 @@ make b
 
 #ifdef CIPHER_AES
 chunkSize :: Int
-chunkSize = 16
+chunkSize = 1024
 
 genNextChunk :: RNG -> (ByteString, RNG)
 genNextChunk (RNG iv counter key) = (chunk, newrng)
     where
-        newrng = RNG (get128 chunk) (add1 counter) key
-        chunk  = AES.encryptECB key bytes
+        newrng = RNG (get128 chunk) (add64 counter) key
+        chunk  = AES.genCTR key (AES.IV bytes) 1024
         bytes  = put128 (iv `xor128` counter)
 #else
 chunkSize :: Int
