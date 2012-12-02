@@ -46,7 +46,8 @@ data RNG = RNG
     {-# UNPACK #-} !Word128
     {-# UNPACK #-} !AES.Key
 
-data AESRNG = AESRNG { aesrngState :: RNG }
+data AESRNG = AESRNG { aesrngState :: RNG
+                     , aesrngCache :: ByteString }
 
 instance Show AESRNG where
     show _ = "aesrng[..]"
@@ -82,7 +83,7 @@ makeParams b = (key, cnt, iv)
 make :: B.ByteString -> Either GenError AESRNG
 make b
     | B.length b < 64 = Left NotEnoughEntropy
-    | otherwise       = Right $ AESRNG { aesrngState = rng }
+    | otherwise       = Right $ AESRNG { aesrngState = rng, aesrngCache = B.empty }
         where
             rng            = RNG (get128 iv) (get128 cnt) key
             (key, cnt, iv) = makeParams b
@@ -150,10 +151,10 @@ instance CryptoRandomGen AESRNG where
 
 instance RandomGen AESRNG where
     next rng =
-        let (bs, rng') = genNextChunk (aesrngState rng) in
+        let (bs, rng') = genRandomBytes rng 16 in
         let (Word128 a _) = get128 bs in
         let n = fromIntegral (a .&. 0x7fffffff) in
-        (n, rng { aesrngState = rng' })
+        (n, rng')
     split rng =
         let (bs, rng') = genRandomBytes rng 64 in
         case make bs of
