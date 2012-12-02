@@ -36,7 +36,15 @@ import qualified Data.ByteString as B
 
 import Data.Word
 import Data.Bits (xor, (.&.))
+
+#ifdef USE_CEREAL
 import Data.Serialize
+#else
+import Foreign.Ptr
+import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
+import Foreign.Storable
+import qualified Data.ByteString.Internal as B
+#endif
 
 data Word128 = Word128 {-# UNPACK #-} !Word64 {-# UNPACK #-} !Word64
 
@@ -52,11 +60,30 @@ data AESRNG = AESRNG { aesrngState :: RNG
 instance Show AESRNG where
     show _ = "aesrng[..]"
 
+-- using serialize to grab a w128 as a non-negligeable cost,
+-- the Bytestring pointer manipulation are much faster.
+#if USE_CEREAL
+
 put128 :: Word128 -> ByteString
 put128 (Word128 a b) = runPut (putWord64host a >> putWord64host b)
 
 get128 :: ByteString -> Word128
 get128 = either (\_ -> Word128 0 0) id . runGet (getWord64host >>= \a -> (getWord64host >>= \b -> return $ Word128 a b))
+
+#else
+
+put128 :: Word128 -> ByteString
+put128 (Word128 a b) = B.unsafeCreate 16 (write64 . castPtr)
+    where write64 :: Ptr Word64 -> IO ()
+          write64 ptr = poke ptr a >> poke (ptr `plusPtr` 8) b
+
+get128 :: ByteString -> Word128
+get128 (B.PS ps s _) = B.inlinePerformIO $ do
+    let ptr = castPtr (unsafeForeignPtrToPtr ps `plusPtr` s) :: Ptr Word64
+    a <- peek ptr
+    b <- peek (ptr `plusPtr` 8)
+    return $ Word128 a b
+#endif
 
 xor128 :: Word128 -> Word128 -> Word128
 xor128 (Word128 a1 b1) (Word128 a2 b2) = Word128 (a1 `xor` a2) (b1 `xor` b2)

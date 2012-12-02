@@ -34,13 +34,16 @@ Flag fastaes
   Description:       Use fast AES if available
   Default:           True
 
+Flag cereal
+  Description:       Use cereal
+  Default:           False
+
 Library
   Build-Depends:     base >= 3 && < 5
                    , bytestring
                    , random
                    , crypto-api >= 0.8
                    , entropy >= 0.2
-                   , cereal >= 0.3.0 && < 0.4.0
   Exposed-modules:   Crypto.Random.AESCtr
   ghc-options:       -Wall
 
@@ -49,6 +52,8 @@ Library
     Build-Depends:   cipher-aes >= 0.1 && < 0.2
   else
     Build-Depends:   cryptocipher
+  if flag(cereal)
+    Build-Depends:   cereal >= 0.3.0 && < 0.4.0
 
 Benchmark bench-cprng-aes
   hs-source-dirs:    Benchmarks
