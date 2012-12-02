@@ -57,6 +57,7 @@ data Word128 = Word128 {-# UNPACK #-} !Word64 {-# UNPACK #-} !Word64
 data RNG = RNG
     {-# UNPACK #-} !Word128
     {-# UNPACK #-} !Word128
+    {-# UNPACK #-} !Word64
     {-# UNPACK #-} !AES.Key
 
 data AESRNG = AESRNG { aesrngState :: RNG
@@ -122,7 +123,7 @@ make b
     | B.length b < 64 = Nothing
     | otherwise       = Just $ AESRNG { aesrngState = rng, aesrngCache = B.empty }
         where
-            rng            = RNG (get128 iv) (get128 cnt) key
+            rng            = RNG (get128 iv) (get128 cnt) 0 key
             (key, cnt, iv) = makeParams b
 
 #ifdef CIPHER_AES
@@ -130,9 +131,9 @@ chunkSize :: Int
 chunkSize = 1024
 
 genNextChunk :: RNG -> (ByteString, RNG)
-genNextChunk (RNG iv counter key) = (chunk, newrng)
+genNextChunk (RNG iv counter sz key) = (chunk, newrng)
     where
-        newrng = RNG (get128 chunk) (add64 counter) key
+        newrng = RNG (get128 chunk) (add64 counter) (sz+fromIntegral chunkSize) key
         chunk  = AES.genCTR key (AES.IV bytes) 1024
         bytes  = put128 (iv `xor128` counter)
 #else
@@ -140,12 +141,17 @@ chunkSize :: Int
 chunkSize = 16
 
 genNextChunk :: RNG -> (ByteString, RNG)
-genNextChunk (RNG iv counter key) = (chunk, newrng)
+genNextChunk (RNG iv counter sz key) = (chunk, newrng)
     where
-        newrng = RNG (get128 chunk) (add1 counter) key
+        newrng = RNG (get128 chunk) (add1 counter) (sz+fromIntegral chunkSize) key
         chunk  = AES.encrypt key bytes
         bytes  = put128 (iv `xor128` counter)
 #endif
+
+getRNGReseedLimit (RNG _ _ sz _)
+    | sz >= limit = 0
+    | otherwise   = fromIntegral (limit - sz)
+    where limit = 2^(24 :: Int)
 
 -- | Initialize a new AES RNG using the system entropy.
 makeSystem :: IO AESRNG
@@ -174,7 +180,7 @@ genRanBytes rng n
                 (b1, b2)  = B.splitAt n b
              in (b1, rng { aesrngState = rng', aesrngCache = b2 })
 
-reseedState b rng@(RNG _ cnt1 _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) key2
+reseedState b rng@(RNG _ cnt1 _ _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) 0 key2
     where (r16, _)          = genNextChunk rng
           (key2, cnt2, iv2) = makeParams b
 
@@ -191,7 +197,7 @@ instance CAPI.CryptoRandomGen AESRNG where
 instance CPRG AESRNG where
     cprgGenBytes rng len          = genRanBytes rng len
     cprgSupplyEntropy rng entropy = rng { aesrngState = reseedState entropy (aesrngState rng) }
-    cprgNeedReseed rng            = 2^24 -- FIXME
+    cprgNeedReseed rng            = getRNGReseedLimit (aesrngState rng)
 
 instance RandomGen AESRNG where
     next rng =
