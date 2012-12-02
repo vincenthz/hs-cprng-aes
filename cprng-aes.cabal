@@ -39,7 +39,7 @@ Flag cereal
   Default:           False
 
 Flag cryptoapi
-  Description:       Use cereal
+  Description:       Use cryptoapi
   Default:           True
 
 Library
