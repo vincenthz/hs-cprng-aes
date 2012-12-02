@@ -22,7 +22,11 @@ module Crypto.Random.AESCtr
 
 import Control.Applicative ((<$>))
 
-import Crypto.Random
+#ifdef USE_CRYPTOAPI
+import qualified Crypto.Random as CAPI
+#endif
+import Crypto.Random.API
+
 import System.Random (RandomGen(..))
 import System.Entropy (getEntropy)
 #ifdef CIPHER_AES
@@ -34,6 +38,7 @@ import qualified "cryptocipher" Crypto.Cipher.AES as AES
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 
+import Data.Maybe (fromJust)
 import Data.Word
 import Data.Bits (xor, (.&.))
 
@@ -112,10 +117,10 @@ makeParams b = (key, cnt, iv)
 -- the initialization.
 --
 -- use `makeSystem` to not have to deal with the generator seed.
-make :: B.ByteString -> Either GenError AESRNG
+make :: B.ByteString -> Maybe AESRNG
 make b
-    | B.length b < 64 = Left NotEnoughEntropy
-    | otherwise       = Right $ AESRNG { aesrngState = rng, aesrngCache = B.empty }
+    | B.length b < 64 = Nothing
+    | otherwise       = Just $ AESRNG { aesrngState = rng, aesrngCache = B.empty }
         where
             rng            = RNG (get128 iv) (get128 cnt) key
             (key, cnt, iv) = makeParams b
@@ -144,10 +149,7 @@ genNextChunk (RNG iv counter key) = (chunk, newrng)
 
 -- | Initialize a new AES RNG using the system entropy.
 makeSystem :: IO AESRNG
-makeSystem = ofRight . make <$> getEntropy 64
-    where
-        ofRight (Left _)  = error "ofRight on a Left value"
-        ofRight (Right x) = x
+makeSystem = fromJust . make <$> getEntropy 64
 
 -- | get a Random number of bytes from the RNG.
 -- it generate randomness by block of chunkSize bytes and will returns
@@ -163,8 +165,8 @@ genRandomBytesState rng n
             | otherwise          = let (b, g') = genNextChunk g
                                     in acc (l+1) (b:bs) g'
 
-genRandomBytes :: AESRNG -> Int -> (ByteString, AESRNG)
-genRandomBytes rng n
+genRanBytes :: AESRNG -> Int -> (ByteString, AESRNG)
+genRanBytes rng n
     | B.length (aesrngCache rng) >= n = let (b1,b2) = B.splitAt n (aesrngCache rng)
                                          in (b1, rng { aesrngCache = b2 })
     | otherwise                       =
@@ -176,23 +178,30 @@ reseedState b rng@(RNG _ cnt1 _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `x
     where (r16, _)          = genNextChunk rng
           (key2, cnt2, iv2) = makeParams b
 
-instance CryptoRandomGen AESRNG where
-    newGen           = make
+#ifdef USE_CRYPTOAPI
+instance CAPI.CryptoRandomGen AESRNG where
+    newGen b         = maybe (Left CAPI.NotEnoughEntropy) Right $ make b
     genSeedLength    = 64
-    genBytes len rng = Right $ genRandomBytes rng len
+    genBytes len rng = Right $ genRanBytes rng len
     reseed b rng
-        | B.length b < 64 = Left NotEnoughEntropy
+        | B.length b < 64 = Left CAPI.NotEnoughEntropy
         | otherwise       = Right $ rng { aesrngState = reseedState b (aesrngState rng) }
+#endif
+
+instance CPRG AESRNG where
+    cprgGenBytes rng len          = genRanBytes rng len
+    cprgSupplyEntropy rng entropy = rng { aesrngState = reseedState entropy (aesrngState rng) }
+    cprgNeedReseed rng            = 2^24 -- FIXME
 
 instance RandomGen AESRNG where
     next rng =
-        let (bs, rng') = genRandomBytes rng 16 in
+        let (bs, rng') = genRanBytes rng 16 in
         let (Word128 a _) = get128 bs in
         let n = fromIntegral (a .&. 0x7fffffff) in
         (n, rng')
     split rng =
-        let (bs, rng') = genRandomBytes rng 64 in
+        let (bs, rng') = genRanBytes rng 64 in
         case make bs of
-            Left _      -> error "assert"
-            Right rng'' -> (rng', rng'')
+            Nothing    -> error "assert"
+            Just rng'' -> (rng', rng'')
     genRange _ = (0, 0x7fffffff)
