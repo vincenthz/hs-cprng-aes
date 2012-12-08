@@ -46,7 +46,13 @@ import Data.Bits (xor, (.&.))
 import Data.Serialize
 #else
 import Foreign.Ptr
+
+#if __GLASGOW_HASKELL__ > 704
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
+#else
+import Foreign.ForeignPtr (unsafeForeignPtrToPtr)
+#endif
+
 import Foreign.Storable
 import qualified Data.ByteString.Internal as B
 #endif
