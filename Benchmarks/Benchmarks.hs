@@ -7,11 +7,11 @@ import Crypto.Random.AESCtr
 import System.IO.Unsafe (unsafePerformIO)
 import Data.IORef
 
-gen rng n = fst (genRandomBytes rng n)
+gen rng n = fst (genRandomBytes n rng)
 
 gen2 rngref n = unsafePerformIO $ do
     rng <- readIORef rngref
-    let (b, rng2) = genRandomBytes rng n
+    let (b, rng2) = genRandomBytes n rng
     writeIORef rngref rng2
     return b
 

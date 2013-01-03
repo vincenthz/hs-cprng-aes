@@ -204,9 +204,9 @@ instance CAPI.CryptoRandomGen AESRNG where
 #endif
 
 instance CPRG AESRNG where
-    cprgGenBytes rng len          = genRanBytes rng len
-    cprgSupplyEntropy rng entropy = rng { aesrngState = reseedState entropy (aesrngState rng) }
-    cprgNeedReseed rng            = getRNGReseedLimit (aesrngState rng)
+    cprgGenBytes len rng          = genRanBytes rng len
+    cprgSupplyEntropy entropy rng = rng { aesrngState = reseedState entropy (aesrngState rng) }
+    cprgNeedReseed rng            = ReseedInBytes $ fromIntegral $ getRNGReseedLimit (aesrngState rng)
 
 instance RandomGen AESRNG where
     next rng =
