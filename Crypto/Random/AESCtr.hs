@@ -12,7 +12,7 @@
 -- each block are generated the following way:
 --   aes (IV `xor` counter) -> 16 bytes output
 --
-{-# LANGUAGE CPP, PackageImports #-}
+{-# LANGUAGE CPP #-}
 module Crypto.Random.AESCtr
     ( AESRNG
     , make
@@ -29,11 +29,7 @@ import Crypto.Random.API
 
 import System.Random (RandomGen(..))
 import System.Entropy (getEntropy)
-#ifdef CIPHER_AES
 import qualified "cipher-aes" Crypto.Cipher.AES as AES
-#else
-import qualified "cryptocipher" Crypto.Cipher.AES as AES
-#endif
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -100,22 +96,13 @@ get128 (B.PS ps s _) = B.inlinePerformIO $ do
 xor128 :: Word128 -> Word128 -> Word128
 xor128 (Word128 a1 b1) (Word128 a2 b2) = Word128 (a1 `xor` a2) (b1 `xor` b2)
 
-#ifdef CIPHER_AES
 add64 :: Word128 -> Word128
 add64 (Word128 a b) = if b >= (0xffffffffffffffff-63) then Word128 (a+1) (b+64) else Word128 a (b+64)
-#else
-add1 :: Word128 -> Word128
-add1 (Word128 a b) = if b == 0xffffffffffffffff then Word128 (a+1) 0 else Word128 a (b+1)
-#endif
 
 makeParams :: ByteString -> (AES.Key, ByteString, ByteString)
 makeParams b = (key, cnt, iv)
     where
-#ifdef CIPHER_AES
         key          = AES.initKey $ B.take 32 left2
-#else
-        (Right key)  = AES.initKey256 $ B.take 32 left2
-#endif
         (cnt, left2) = B.splitAt 16 left1
         (iv, left1)  = B.splitAt 16 b
 
@@ -132,7 +119,6 @@ make b
             rng            = RNG (get128 iv) (get128 cnt) 0 key
             (key, cnt, iv) = makeParams b
 
-#ifdef CIPHER_AES
 chunkSize :: Int
 chunkSize = 1024
 
@@ -142,17 +128,6 @@ genNextChunk (RNG iv counter sz key) = (chunk, newrng)
         newrng = RNG (get128 chunk) (add64 counter) (sz+fromIntegral chunkSize) key
         chunk  = AES.genCTR key (AES.IV bytes) 1024
         bytes  = put128 (iv `xor128` counter)
-#else
-chunkSize :: Int
-chunkSize = 16
-
-genNextChunk :: RNG -> (ByteString, RNG)
-genNextChunk (RNG iv counter sz key) = (chunk, newrng)
-    where
-        newrng = RNG (get128 chunk) (add1 counter) (sz+fromIntegral chunkSize) key
-        chunk  = AES.encrypt key bytes
-        bytes  = put128 (iv `xor128` counter)
-#endif
 
 getRNGReseedLimit :: RNG -> Int
 getRNGReseedLimit (RNG _ _ sz _)
