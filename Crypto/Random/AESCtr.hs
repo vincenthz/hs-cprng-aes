@@ -29,7 +29,7 @@ import Crypto.Random.API
 
 import System.Random (RandomGen(..))
 import System.Entropy (getEntropy)
-import qualified "cipher-aes" Crypto.Cipher.AES as AES
+import qualified Crypto.Cipher.AES as AES
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
