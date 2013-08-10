@@ -22,9 +22,6 @@ module Crypto.Random.AESCtr
 
 import Control.Applicative ((<$>))
 
-#ifdef USE_CRYPTOAPI
-import qualified Crypto.Random as CAPI
-#endif
 import Crypto.Random.API
 
 import System.Random (RandomGen(..))
@@ -60,7 +57,7 @@ data RNG = RNG
     {-# UNPACK #-} !Word128
     {-# UNPACK #-} !Word128
     {-# UNPACK #-} !Word64
-    {-# UNPACK #-} !AES.Key
+    {-# UNPACK #-} !AES.AES
 
 data AESRNG = AESRNG { aesrngState :: RNG
                      , aesrngCache :: ByteString }
@@ -99,10 +96,10 @@ xor128 (Word128 a1 b1) (Word128 a2 b2) = Word128 (a1 `xor` a2) (b1 `xor` b2)
 add64 :: Word128 -> Word128
 add64 (Word128 a b) = if b >= (0xffffffffffffffff-63) then Word128 (a+1) (b+64) else Word128 a (b+64)
 
-makeParams :: ByteString -> (AES.Key, ByteString, ByteString)
+makeParams :: ByteString -> (AES.AES, ByteString, ByteString)
 makeParams b = (key, cnt, iv)
     where
-        key          = AES.initKey $ B.take 32 left2
+        key          = AES.initAES $ B.take 32 left2
         (cnt, left2) = B.splitAt 16 left1
         (iv, left1)  = B.splitAt 16 b
 
@@ -126,7 +123,7 @@ genNextChunk :: RNG -> (ByteString, RNG)
 genNextChunk (RNG iv counter sz key) = (chunk, newrng)
     where
         newrng = RNG (get128 chunk) (add64 counter) (sz+fromIntegral chunkSize) key
-        chunk  = AES.genCTR key (AES.IV bytes) 1024
+        chunk  = AES.genCTR key bytes 1024
         bytes  = put128 (iv `xor128` counter)
 
 getRNGReseedLimit :: RNG -> Int
@@ -166,17 +163,6 @@ reseedState :: ByteString -> RNG -> RNG
 reseedState b rng@(RNG _ cnt1 _ _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) 0 key2
     where (r16, _)          = genNextChunk rng
           (key2, cnt2, iv2) = makeParams b
-
-#ifdef USE_CRYPTOAPI
--- going away in 0.4.0. use the CPRG instance.
-instance CAPI.CryptoRandomGen AESRNG where
-    newGen b         = maybe (Left CAPI.NotEnoughEntropy) Right $ make b
-    genSeedLength    = 64
-    genBytes len rng = Right $ genRanBytes rng len
-    reseed b rng
-        | B.length b < 64 = Left CAPI.NotEnoughEntropy
-        | otherwise       = Right $ rng { aesrngState = reseedState b (aesrngState rng) }
-#endif
 
 instance CPRG AESRNG where
     cprgGenBytes len rng          = genRanBytes rng len

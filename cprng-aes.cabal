@@ -1,5 +1,5 @@
 Name:                cprng-aes
-Version:             0.3.4
+Version:             0.4.0
 Description:         
     Simple crypto pseudo-random-number-generator with really good randomness property.
     .
@@ -34,10 +34,6 @@ Flag cereal
   Description:       Use cereal
   Default:           False
 
-Flag cryptoapi
-  Description:       Use cryptoapi
-  Default:           True
-
 Library
   Build-Depends:     base >= 3 && < 5
                    , bytestring
@@ -47,13 +43,10 @@ Library
   Exposed-modules:   Crypto.Random.AESCtr
   ghc-options:       -Wall
 
-  Build-Depends:   cipher-aes >= 0.1 && < 0.2
+  Build-Depends:   cipher-aes >= 0.2 && < 0.3
   if flag(cereal)
     Build-Depends:   cereal >= 0.3.0 && < 0.4.0
     cpp-options:     -DUSE_CEREAL
-  if flag(cryptoapi)
-    Build-Depends:   crypto-api >= 0.8
-    cpp-options:     -DUSE_CRYPTOAPI
 
 Benchmark bench-cprng-aes
   hs-source-dirs:    Benchmarks
