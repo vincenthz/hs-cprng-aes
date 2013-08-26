@@ -4,14 +4,15 @@ import Criterion.Main
 
 import qualified Data.ByteString as B
 import Crypto.Random.AESCtr
+import Crypto.Random
 import System.IO.Unsafe (unsafePerformIO)
 import Data.IORef
 
-gen rng n = fst (genRandomBytes n rng)
+gen rng n = fst (cprgGenerate n rng)
 
 gen2 rngref n = unsafePerformIO $ do
     rng <- readIORef rngref
-    let (b, rng2) = genRandomBytes n rng
+    let (b, rng2) = cprgGenerate n rng
     writeIORef rngref rng2
     return b
 
