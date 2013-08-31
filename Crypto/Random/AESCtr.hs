@@ -23,6 +23,7 @@ module Crypto.Random.AESCtr
 import Crypto.Random
 import System.Random (RandomGen(..))
 import Crypto.Random.AESCtr.Internal
+import Control.Arrow (second)
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -30,38 +31,34 @@ import qualified Data.ByteString as B
 import Data.Byteable
 import Data.Bits (xor, (.&.))
 
-data AESRNG = AESRNG { aesrngState   :: RNG
-                     , aesrngEntropy :: EntropyPool
-                     , aesrngEntropyLevel :: EntropyReseedLevel
-                     , aesrngCache   :: ByteString }
+data AESRNG = AESRNG { aesrngState     :: RNG
+                     , aesrngEntropy   :: EntropyPool
+                     , aesrngThreshold :: Int -- ^ in number of generated block
+                     , aesrngCache     :: ByteString }
 
 instance Show AESRNG where
     show _ = "aesrng[..]"
 
-makeFrom :: EntropyPool -> EntropyReseedLevel -> B.ByteString -> AESRNG
-makeFrom entPool lvl b = AESRNG
+makeFrom :: EntropyPool -> B.ByteString -> AESRNG
+makeFrom entPool b = AESRNG
     { aesrngState        = rng
     , aesrngEntropy      = entPool
-    , aesrngEntropyLevel = lvl
+    , aesrngThreshold    = 1024 -- in blocks generated, so 1mb
     , aesrngCache        = B.empty }
   where rng            = RNG (get128 iv) (get128 cnt) 0 key
         (key, cnt, iv) = makeParams b
 
--- | make an AES RNG from a bytestring seed. the bytestring need to be at least 64 bytes.
--- if the bytestring is longer, the extra bytes will be ignored and will not take part in
--- the initialization.
+-- | make an AES RNG from an EntropyPool.
 --
--- use `makeSystem` to not have to deal with the generator seed.
-make :: EntropyPool -> EntropyReseedLevel -> AESRNG
-make entPool lvl = makeFrom entPool lvl b
+-- use `makeSystem` to not have to deal with the entropy pool.
+make :: EntropyPool -> AESRNG
+make entPool = makeFrom entPool b
   where !b = toBytes $ grabEntropy 64 entPool
 
 -- | Initialize a new AES RNG using the system entropy.
 -- {-# DEPRECATED makeSystem "use cprgCreate with an entropy pool" #-}
 makeSystem :: IO AESRNG
-makeSystem =
-    createEntropyPool >>= \pool ->
-    return $ make pool EntropyReseed_Normal
+makeSystem = make `fmap` createEntropyPool
 
 -- | get a Random number of bytes from the RNG.
 -- it generate randomness by block of chunkSize bytes and will returns
@@ -87,33 +84,31 @@ genRanBytesNoCheck rng n
 
 -- | generate a random set of bytes
 genRanBytes :: AESRNG -> Int -> (ByteString, AESRNG)
-genRanBytes rng n =
-    let r@(bs, rng') = genRanBytesNoCheck rng n in
-    case aesrngEntropyLevel rng of
-        EntropyReseed_None   -> r
-        EntropyReseed_Normal -> (bs, reseedIf 1024 rng')
-        EntropyReseed_High   -> (bs, reseedIf 16   rng')
-  where reseedIf lvl g
-            | getNbChunksGenerated (aesrngState g) >= lvl =
-                 let ent = toBytes $ grabEntropy 64 (aesrngEntropy g)
-                  in rng { aesrngState = reseedState ent (aesrngState g) }
-            | otherwise  = g
+genRanBytes rng n = second reseedThreshold $ genRanBytesNoCheck rng n
 
+reseedThreshold :: AESRNG -> AESRNG
+reseedThreshold rng
+    | getNbChunksGenerated (aesrngState rng) >= lvl =
+         let ent = toBytes $ grabEntropy 64 (aesrngEntropy rng)
+          in rng { aesrngState = reseedState ent (aesrngState rng) }
+    | otherwise  = rng
+  where
+        lvl = aesrngThreshold rng
         reseedState :: ByteString -> RNG -> RNG
         reseedState b g@(RNG _ cnt1 _ _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) 0 key2
             where (r16, _)          = genNextChunk g
                   (key2, cnt2, iv2) = makeParams b
 
 instance CPRG AESRNG where
-    cprgCreate pool lvl             = make pool lvl
+    cprgCreate                      = make
+    cprgSetReseedThreshold lvl rng  = reseedThreshold (rng { aesrngThreshold = lvl })
     cprgGenerate len rng            = genRanBytes rng len
     cprgGenerateWithEntropy len rng =
         let ent        = toBytes $ grabEntropy len (aesrngEntropy rng)
             (bs, rng') = genRanBytes rng len
          in (B.pack $ B.zipWith xor ent bs, rng')
-    cprgFork lvl rng | lvl == EntropyReseed_None = let (b,rng') = genRanBytes rng 64
-                                                    in (rng', makeFrom (aesrngEntropy rng) lvl b)
-                     | otherwise                 = (rng, make (aesrngEntropy rng) lvl)
+    cprgFork rng = let (b,rng') = genRanBytes rng 64
+                    in (rng', makeFrom (aesrngEntropy rng) b)
 
 instance RandomGen AESRNG where
     next rng =
@@ -122,6 +117,6 @@ instance RandomGen AESRNG where
         let n = fromIntegral (a .&. 0x7fffffff) in
         (n, rng')
     split rng =
-        let rng' = make (aesrngEntropy rng) (aesrngEntropyLevel rng)
+        let rng' = make (aesrngEntropy rng)
          in (rng, rng')
     genRange _ = (0, 0x7fffffff)
