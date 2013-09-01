@@ -101,7 +101,8 @@ reseedThreshold rng
 
 instance CPRG AESRNG where
     cprgCreate                      = make
-    cprgSetReseedThreshold lvl rng  = reseedThreshold (rng { aesrngThreshold = lvl })
+    cprgSetReseedThreshold lvl rng  = reseedThreshold (rng { aesrngThreshold = if nbChunks > 0 then nbChunks else 1 })
+      where nbChunks = lvl `div` chunkSize
     cprgGenerate len rng            = genRanBytes rng len
     cprgGenerateWithEntropy len rng =
         let ent        = toBytes $ grabEntropy len (aesrngEntropy rng)
