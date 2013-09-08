@@ -1,5 +1,5 @@
 Name:                cprng-aes
-Version:             0.5.1
+Version:             0.5.2
 Description:         
     Simple crypto pseudo-random-number-generator with really good randomness property.
     .
@@ -35,7 +35,7 @@ Library
                    , bytestring
                    , byteable
                    , random
-                   , crypto-random >= 0.0 && < 0.1
+                   , crypto-random >= 0.0.7 && < 0.1
   Exposed-modules:   Crypto.Random.AESCtr
   Other-modules:     Crypto.Random.AESCtr.Internal
   ghc-options:       -Wall
