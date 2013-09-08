@@ -31,6 +31,17 @@ import qualified Data.ByteString as B
 import Data.Byteable
 import Data.Bits (xor, (.&.))
 
+-- | AES Counter mode Pseudo random generator.
+--
+-- Provide a very good Cryptographic pseudo random generator
+-- that create pseudo random output based an AES cipher
+-- used in counter mode, initialized from random key, random IV
+-- and random nonce.
+--
+-- This CPRG uses 64 bytes of pure entropy to create its random state.
+--
+-- By default, this generator will automatically reseed after generating
+-- 1 megabyte of data.
 data AESRNG = AESRNG { aesrngState     :: RNG
                      , aesrngEntropy   :: EntropyPool
                      , aesrngThreshold :: Int -- ^ in number of generated block
