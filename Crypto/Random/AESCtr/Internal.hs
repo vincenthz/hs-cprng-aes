@@ -30,7 +30,7 @@ data Word128 = Word128 {-# UNPACK #-} !Word64 {-# UNPACK #-} !Word64
 
 {-| An opaque object containing an AES CPRNG -}
 data RNG = RNG
-    {-# UNPACK #-} !Word128 -- iv
+    {-# UNPACK #-} !Word128 -- nonce
     {-# UNPACK #-} !Word128 -- cnt
     {-# UNPACK #-} !Int     -- number of chunks generated since reseed
     {-# UNPACK #-} !AES.AES -- AES context
@@ -63,18 +63,18 @@ withBsPtr (B.PS ps s _) f = withForeignPtr ps $ \ptr -> f (ptr `plusPtr` s)
 -}
 
 makeParams :: ByteString -> (AES.AES, ByteString, ByteString)
-makeParams b = (key, cnt, iv)
+makeParams b = (key, cnt, nonce)
     where
-        key          = AES.initAES $ B.take 32 left2
-        (cnt, left2) = B.splitAt 16 left1
-        (iv, left1)  = B.splitAt 16 b
+        key            = AES.initAES $ B.take 32 left2
+        (cnt, left2)   = B.splitAt 16 left1
+        (nonce, left1) = B.splitAt 16 b
 
 chunkSize :: Int
 chunkSize = 1024
 
 genNextChunk :: RNG -> (ByteString, RNG)
-genNextChunk (RNG iv counter nbChunks key) = (chunk, newrng)
+genNextChunk (RNG nonce counter nbChunks key) = (chunk, newrng)
   where
-        newrng = RNG (get128 chunk) (add64 counter) (nbChunks+1) key
+        newrng = RNG nonce (add64 counter) (nbChunks+1) key
         chunk  = AES.genCTR key bytes chunkSize
-        bytes  = put128 (iv `xor128` counter)
+        bytes  = put128 (nonce `xor128` counter)
