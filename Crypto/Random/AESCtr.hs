@@ -21,7 +21,6 @@ module Crypto.Random.AESCtr
     ) where
 
 import Crypto.Random
-import System.Random (RandomGen(..))
 import Crypto.Random.AESCtr.Internal
 import Control.Arrow (second)
 
@@ -56,8 +55,8 @@ makeFrom entPool b = AESRNG
     , aesrngEntropy      = entPool
     , aesrngThreshold    = 1024 -- in blocks generated, so 1mb
     , aesrngCache        = B.empty }
-  where rng            = RNG (get128 iv) (get128 cnt) 0 key
-        (key, cnt, iv) = makeParams b
+  where rng = RNG entropy cnt 0 key
+        (key, cnt, entropy) = makeParams b
 
 -- | make an AES RNG from an EntropyPool.
 --
@@ -106,9 +105,9 @@ reseedThreshold rng
   where
         lvl = aesrngThreshold rng
         reseedState :: ByteString -> RNG -> RNG
-        reseedState b g@(RNG _ cnt1 _ _) = RNG (get128 r16 `xor128` get128 iv2) (cnt1 `xor128` get128 cnt2) 0 key2
-            where (r16, _)          = genNextChunk g
-                  (key2, cnt2, iv2) = makeParams b
+        reseedState b g@(RNG _ cnt1 _ _) = RNG left cnt2 0 key2
+            where -- (r16, _)           = genNextChunk g
+                  (key2, cnt2, left) = makeParams b
 
 instance CPRG AESRNG where
     cprgCreate                      = make
@@ -122,6 +121,7 @@ instance CPRG AESRNG where
     cprgFork rng = let (b,rng') = genRanBytes rng 64
                     in (rng', makeFrom (aesrngEntropy rng) b)
 
+{-
 instance RandomGen AESRNG where
     next rng =
         let (bs, rng') = genRanBytes rng 16 in
@@ -132,3 +132,4 @@ instance RandomGen AESRNG where
         let rng' = make (aesrngEntropy rng)
          in (rng, rng')
     genRange _ = (0, 0x7fffffff)
+-}

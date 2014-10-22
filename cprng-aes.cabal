@@ -34,13 +34,12 @@ Library
   Build-Depends:     base >= 3 && < 5
                    , bytestring
                    , byteable
-                   , random
                    , crypto-random >= 0.0.7 && < 0.1
+                   , cipher-aes >= 0.2.9 && < 0.3
+
   Exposed-modules:   Crypto.Random.AESCtr
   Other-modules:     Crypto.Random.AESCtr.Internal
   ghc-options:       -Wall
-
-  Build-Depends:   cipher-aes >= 0.2 && < 0.3
 
 Benchmark bench-cprng-aes
   hs-source-dirs:    Benchmarks
