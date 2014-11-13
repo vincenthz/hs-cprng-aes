@@ -41,10 +41,10 @@ import Data.Bits (xor, (.&.))
 --
 -- By default, this generator will automatically reseed after generating
 -- 1 megabyte of data.
-data AESRNG = AESRNG { aesrngState     :: RNG
+data AESRNG = AESRNG { aesrngState     :: !RNG
                      , aesrngEntropy   :: EntropyPool
-                     , aesrngThreshold :: Int -- ^ in number of generated block
-                     , aesrngCache     :: ByteString }
+                     , aesrngThreshold :: !Int -- ^ in number of generated block
+                     , aesrngCache     :: !ByteString }
 
 instance Show AESRNG where
     show _ = "aesrng[..]"
@@ -55,8 +55,7 @@ makeFrom entPool b = AESRNG
     , aesrngEntropy      = entPool
     , aesrngThreshold    = 1024 -- in blocks generated, so 1mb
     , aesrngCache        = B.empty }
-  where rng = RNG entropy cnt 0 key
-        (key, cnt, entropy) = makeParams b
+  where rng = makeRNG b
 
 -- | make an AES RNG from an EntropyPool.
 --
@@ -99,15 +98,10 @@ genRanBytes rng n = second reseedThreshold $ genRanBytesNoCheck rng n
 reseedThreshold :: AESRNG -> AESRNG
 reseedThreshold rng
     | getNbChunksGenerated (aesrngState rng) >= lvl =
-         let ent = toBytes $ grabEntropy 64 (aesrngEntropy rng)
-          in rng { aesrngState = reseedState ent (aesrngState rng) }
+         let newRngState = makeRNG $ toBytes $ grabEntropy 64 (aesrngEntropy rng)
+          in rng { aesrngState = newRngState }
     | otherwise  = rng
-  where
-        lvl = aesrngThreshold rng
-        reseedState :: ByteString -> RNG -> RNG
-        reseedState b g@(RNG _ cnt1 _ _) = RNG left cnt2 0 key2
-            where -- (r16, _)           = genNextChunk g
-                  (key2, cnt2, left) = makeParams b
+  where lvl = aesrngThreshold rng
 
 instance CPRG AESRNG where
     cprgCreate                      = make
